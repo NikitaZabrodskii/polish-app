@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Testing App</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .section {
+        margin-bottom: 30px;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 5px;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      #results {
+        margin-top: 20px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Authentication Section -->
+    <div id="authSection" class="section">
+      <h2>Аутентификация</h2>
+
+      <div id="loginForm">
+        <div class="form-group">
+          <label for="loginUsername">Имя пользователя:</label>
+          <input type="text" id="loginUsername" required />
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Пароль:</label>
+          <input type="password" id="loginPassword" required />
+        </div>
+        <button id="loginBtn">Войти</button>
+        <button id="showRegisterBtn">Регистрация</button>
+      </div>
+
+      <div id="registerForm" class="hidden">
+        <div class="form-group">
+          <label for="registerUsername">Имя пользователя:</label>
+          <input type="text" id="registerUsername" required />
+        </div>
+        <div class="form-group">
+          <label for="registerPassword">Пароль:</label>
+          <input type="password" id="registerPassword" required />
+        </div>
+        <button id="registerBtn">Зарегистрироваться</button>
+        <button id="showLoginBtn">Назад к входу</button>
+      </div>
+
+      <div id="userInfo" class="hidden">
+        <h3>Информация о пользователе</h3>
+        <p id="welcomeMessage"></p>
+        <div>
+          <button id="logoutBtn">Выйти</button>
+          <button id="showChangePasswordBtn">Изменить пароль</button>
+        </div>
+      </div>
+
+      <div id="changePasswordForm" class="hidden">
+        <div class="form-group">
+          <label for="currentPassword">Текущий пароль:</label>
+          <input type="password" id="currentPassword" required />
+        </div>
+        <div class="form-group">
+          <label for="newPassword">Новый пароль:</label>
+          <input type="password" id="newPassword" required />
+        </div>
+        <button id="changePasswordBtn">Изменить пароль</button>
+        <button id="cancelChangePasswordBtn">Отмена</button>
+      </div>
+    </div>
+
+    <!-- Test Creation Section -->
+    <div id="testSection" class="section">
+      <h2>Управление тестами</h2>
+      <form id="testForm" enctype="multipart/form-data">
+        <div class="form-group">
+          <label for="title">Название теста:</label>
+          <input type="text" id="title" name="title" required />
+        </div>
+        <div class="form-group">
+          <label for="text">Текст вопроса:</label>
+          <textarea id="text" name="text" required></textarea>
+        </div>
+        <div class="form-group">
+          <label for="answers">Варианты ответов (через запятую):</label>
+          <input type="text" id="answers" name="answers" required />
+        </div>
+        <div class="form-group">
+          <label for="audiofile">Аудио файл:</label>
+          <input type="file" id="audiofile" name="audiofile" accept="audio/*" />
+        </div>
+        <button type="submit">Создать тест</button>
+      </form>
+
+      <div style="margin-top: 20px">
+        <button id="getTestsBtn">Получить все тесты</button>
+
+        <div style="margin-top: 10px">
+          <label for="testId">ID теста:</label>
+          <input type="number" id="testId" min="1" />
+          <button id="getTestBtn">Получить тест</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+      // Auth-related UI functionality
+      document
+        .getElementById("showRegisterBtn")
+        .addEventListener("click", () => {
+          document.getElementById("loginForm").classList.add("hidden");
+          document.getElementById("registerForm").classList.remove("hidden");
+        });
+
+      document.getElementById("showLoginBtn").addEventListener("click", () => {
+        document.getElementById("registerForm").classList.add("hidden");
+        document.getElementById("loginForm").classList.remove("hidden");
+      });
+
+      document
+        .getElementById("showChangePasswordBtn")
+        .addEventListener("click", () => {
+          document.getElementById("userInfo").classList.add("hidden");
+          document
+            .getElementById("changePasswordForm")
+            .classList.remove("hidden");
+        });
+
+      document
+        .getElementById("cancelChangePasswordBtn")
+        .addEventListener("click", () => {
+          document.getElementById("changePasswordForm").classList.add("hidden");
+          document.getElementById("userInfo").classList.remove("hidden");
+        });
+
+      // Check if user is already logged in
+      async function checkAuthStatus() {
+        try {
+          // Get token from localStorage
+          const token = localStorage.getItem("authToken");
+          if (!token) {
+            showLoginForm();
+            return;
+          }
+
+          const response = await fetch(
+            `http://localhost:3000/api/auth/me?token=${token}`
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            showUserInfo(data.user);
+          } else {
+            showLoginForm();
+          }
+        } catch (error) {
+          console.error("Error checking auth status:", error);
+          showLoginForm();
+        }
+      }
+
+      function showUserInfo(user) {
+        document.getElementById("loginForm").classList.add("hidden");
+        document.getElementById("registerForm").classList.add("hidden");
+        document.getElementById("changePasswordForm").classList.add("hidden");
+        document.getElementById("userInfo").classList.remove("hidden");
+
+        document.getElementById(
+          "welcomeMessage"
+        ).textContent = `Добро пожаловать, ${user.username}!`;
+      }
+
+      function showLoginForm() {
+        document.getElementById("userInfo").classList.add("hidden");
+        document.getElementById("registerForm").classList.add("hidden");
+        document.getElementById("changePasswordForm").classList.add("hidden");
+        document.getElementById("loginForm").classList.remove("hidden");
+      }
+
+      // Register
+      document
+        .getElementById("registerBtn")
+        .addEventListener("click", async () => {
+          const username = document.getElementById("registerUsername").value;
+          const password = document.getElementById("registerPassword").value;
+
+          if (!username || !password) {
+            alert("Пожалуйста, заполните все поля");
+            return;
+          }
+
+          try {
+            const response = await fetch(
+              "http://localhost:3000/api/auth/register",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ username, password }),
+              }
+            );
+
+            const data = await response.json();
+
+            if (response.ok) {
+              alert("Регистрация успешна! Теперь вы можете войти.");
+              document.getElementById("registerForm").classList.add("hidden");
+              document.getElementById("loginForm").classList.remove("hidden");
+              displayResult("Регистрация успешна", data);
+            } else {
+              alert(`Ошибка: ${data.error}`);
+              displayResult("Ошибка регистрации", data);
+            }
+          } catch (error) {
+            console.error("Error during registration:", error);
+            alert("Произошла ошибка при регистрации");
+          }
+        });
+
+      // Login
+      document
+        .getElementById("loginBtn")
+        .addEventListener("click", async () => {
+          const username = document.getElementById("loginUsername").value;
+          const password = document.getElementById("loginPassword").value;
+
+          if (!username || !password) {
+            alert("Пожалуйста, заполните все поля");
+            return;
+          }
+
+          try {
+            const response = await fetch(
+              "http://localhost:3000/api/auth/login",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                credentials: "include", // Important to include cookies
+                body: JSON.stringify({ username, password }),
+              }
+            );
+
+            const data = await response.json();
+
+            if (response.ok) {
+              // Store the token in localStorage for using in future requests
+              localStorage.setItem("authToken", data.token);
+              showUserInfo(data.user);
+              displayResult("Вход выполнен успешно", data);
+            } else {
+              alert(`Ошибка: ${data.error}`);
+              displayResult("Ошибка входа", data);
+            }
+          } catch (error) {
+            console.error("Error during login:", error);
+            alert("Произошла ошибка при входе");
+          }
+        });
+
+      // Logout
+      document
+        .getElementById("logoutBtn")
+        .addEventListener("click", async () => {
+          try {
+            const response = await fetch(
+              "http://localhost:3000/api/auth/logout",
+              {
+                method: "POST",
+                credentials: "include", // Important to include cookies
+              }
+            );
+
+            if (response.ok) {
+              // Clear the token from localStorage
+              localStorage.removeItem("authToken");
+              showLoginForm();
+              displayResult("Выход выполнен успешно", await response.json());
+            }
+          } catch (error) {
+            console.error("Error during logout:", error);
+            alert("Произошла ошибка при выходе");
+          }
+        });
+
+      // Change Password
+      document
+        .getElementById("changePasswordBtn")
+        .addEventListener("click", async () => {
+          const currentPassword =
+            document.getElementById("currentPassword").value;
+          const newPassword = document.getElementById("newPassword").value;
+
+          if (!currentPassword || !newPassword) {
+            alert("Пожалуйста, заполните все поля");
+            return;
+          }
+
+          try {
+            const response = await fetch(
+              "http://localhost:3000/api/auth/change-password",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                credentials: "include", // Important to include cookies
+                body: JSON.stringify({ currentPassword, newPassword }),
+              }
+            );
+
+            const data = await response.json();
+
+            if (response.ok) {
+              alert("Пароль успешно изменен");
+              document
+                .getElementById("changePasswordForm")
+                .classList.add("hidden");
+              document.getElementById("userInfo").classList.remove("hidden");
+              displayResult("Пароль изменен", data);
+            } else {
+              alert(`Ошибка: ${data.error}`);
+              displayResult("Ошибка при изменении пароля", data);
+            }
+          } catch (error) {
+            console.error("Error changing password:", error);
+            alert("Произошла ошибка при изменении пароля");
+          }
+        });
+
+      // Test-related functionality - update with credentials
+      document
+        .getElementById("testForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          const formData = new FormData();
+          formData.append("title", document.getElementById("title").value);
+          formData.append("text", document.getElementById("text").value);
+
+          // Get token from localStorage
+          const token = localStorage.getItem("authToken");
+          if (token) {
+            formData.append("token", token);
+          }
+
+          // Преобразуем строку с ответами в массив и отправляем как JSON
+          const answersInput = document.getElementById("answers").value;
+          const answersArray = answersInput
+            .split(",")
+            .map((item) => item.trim());
+          formData.append("answers", JSON.stringify(answersArray));
+
+          // Добавляем файл из поля выбора файла
+          const audioInput = document.getElementById("audiofile");
+          if (audioInput.files.length > 0) {
+            formData.append("audiofile", audioInput.files[0]);
+          }
+
+          try {
+            const response = await fetch("http://localhost:3000/api/tests/", {
+              method: "POST",
+              body: formData,
+              credentials: "include", // Include cookies for authentication
+            });
+
+            if (response.status === 401) {
+              alert("Для создания теста необходимо войти в систему");
+              showLoginForm();
+              return;
+            }
+
+            const result = await response.json();
+            console.log("Тест создан:", result);
+            displayResult("Тест успешно создан", result);
+
+            // Здесь result.audiofile будет содержать полный URL к аудиофайлу
+            if (result.audiofile) {
+              console.log("URL аудио:", result.audiofile);
+              // Можно добавить аудиоплеер с этим URL
+              const audioPlayer = document.createElement("audio");
+              audioPlayer.controls = true;
+              audioPlayer.src = result.audiofile;
+              document.getElementById("results").appendChild(audioPlayer);
+            }
+          } catch (error) {
+            console.error("Ошибка при создании теста:", error);
+            displayResult("Ошибка при создании теста", error);
+          }
+        });
+
+      // Update get tests to include token in query
+      document
+        .getElementById("getTestsBtn")
+        .addEventListener("click", async () => {
+          try {
+            // Get token from localStorage
+            const token = localStorage.getItem("authToken");
+            const url = token
+              ? `http://localhost:3000/api/tests?token=${token}`
+              : "http://localhost:3000/api/tests";
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            console.log("Все тесты:", data);
+            displayResult("Список всех тестов", data);
+
+            // Если есть тесты, вывести их в виде списка
+            if (data.tests && data.tests.length > 0) {
+              const testList = document.createElement("ul");
+              testList.style.listStyle = "none";
+              testList.style.padding = "0";
+
+              data.tests.forEach((test) => {
+                const listItem = document.createElement("li");
+                listItem.style.display = "flex";
+                listItem.style.justifyContent = "space-between";
+                listItem.style.alignItems = "center";
+                listItem.style.padding = "8px";
+                listItem.style.margin = "5px 0";
+                listItem.style.backgroundColor = "#f9f9f9";
+                listItem.style.borderRadius = "4px";
+
+                const testInfo = document.createElement("span");
+                testInfo.textContent = `ID: ${test.id}, Название: ${test.title}`;
+
+                const buttonContainer = document.createElement("div");
+                buttonContainer.style.display = "flex";
+                buttonContainer.style.gap = "8px";
+
+                const editButton = document.createElement("button");
+                editButton.textContent = "Редактировать";
+                editButton.style.backgroundColor = "#4CAF50";
+                editButton.addEventListener("click", () => showEditForm(test));
+
+                const deleteButton = document.createElement("button");
+                deleteButton.textContent = "Удалить";
+                deleteButton.style.backgroundColor = "#f44336";
+                deleteButton.addEventListener("click", () =>
+                  deleteTest(test.id)
+                );
+
+                buttonContainer.appendChild(editButton);
+                buttonContainer.appendChild(deleteButton);
+
+                listItem.appendChild(testInfo);
+                listItem.appendChild(buttonContainer);
+                testList.appendChild(listItem);
+              });
+
+              document.getElementById("results").appendChild(testList);
+            }
+          } catch (error) {
+            console.error("Ошибка при получении тестов:", error);
+            displayResult("Ошибка при получении тестов", error);
+          }
+        });
+
+      // Function to delete a test
+      async function deleteTest(id) {
+        if (!confirm(`Вы уверены, что хотите удалить тест с ID ${id}?`)) {
+          return;
+        }
+
+        // Get token from localStorage
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          alert("Для удаления теста необходимо войти в систему");
+          showLoginForm();
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `http://localhost:3000/api/tests/${id}`,
+            {
+              method: "DELETE",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ token }),
+            }
+          );
+
+          if (response.status === 401) {
+            alert("Для удаления теста необходимо войти в систему");
+            showLoginForm();
+            return;
+          }
+
+          const result = await response.json();
+
+          if (response.ok) {
+            alert("Тест успешно удален");
+            // Refresh the test list
+            document.getElementById("getTestsBtn").click();
+            displayResult("Тест удален", result);
+          } else {
+            alert(`Ошибка: ${result.error}`);
+            displayResult("Ошибка при удалении теста", result);
+          }
+        } catch (error) {
+          console.error("Ошибка при удалении теста:", error);
+          alert("Произошла ошибка при удалении теста");
+        }
+      }
+
+      // Update get test by ID to include token in query
+      document
+        .getElementById("getTestBtn")
+        .addEventListener("click", async () => {
+          const testId = document.getElementById("testId").value;
+
+          if (!testId) {
+            alert("Пожалуйста, введите ID теста");
+            return;
+          }
+
+          try {
+            // Get token from localStorage
+            const token = localStorage.getItem("authToken");
+            const url = token
+              ? `http://localhost:3000/api/tests/${testId}?token=${token}`
+              : `http://localhost:3000/api/tests/${testId}`;
+
+            const response = await fetch(url);
+            const test = await response.json();
+
+            console.log("Тест:", test);
+            displayResult(`Тест с ID ${testId}`, test);
+
+            // Если есть аудиофайл, добавить аудиоплеер
+            if (test.audiofile) {
+              const audioPlayer = document.createElement("audio");
+              audioPlayer.controls = true;
+              audioPlayer.src = test.audiofile;
+              document.getElementById("results").appendChild(audioPlayer);
+            }
+          } catch (error) {
+            console.error("Ошибка при получении теста:", error);
+            displayResult("Ошибка при получении теста", error);
+          }
+        });
+
+      // Helper function to display results
+      function displayResult(title, data, element = "results") {
+        const resultsDiv = document.getElementById(element);
+        resultsDiv.innerHTML = "";
+
+        const titleElement = document.createElement("h3");
+        titleElement.textContent = title;
+        resultsDiv.appendChild(titleElement);
+
+        const preElement = document.createElement("pre");
+        preElement.textContent = JSON.stringify(data, null, 2);
+        resultsDiv.appendChild(preElement);
+      }
+
+      // Function to show edit form
+      function showEditForm(test) {
+        const editFormContainer = document.createElement("div");
+        editFormContainer.id = "editFormContainer";
+        editFormContainer.style.marginTop = "20px";
+        editFormContainer.style.padding = "15px";
+        editFormContainer.style.border = "1px solid #ddd";
+        editFormContainer.style.borderRadius = "5px";
+
+        const editTitle = document.createElement("h3");
+        editTitle.textContent = `Редактировать тест #${test.id}`;
+
+        const editForm = document.createElement("form");
+        editForm.id = "editTestForm";
+
+        // Title input
+        const titleLabel = document.createElement("label");
+        titleLabel.textContent = "Название:";
+        titleLabel.htmlFor = "editTitle";
+
+        const titleInput = document.createElement("input");
+        titleInput.type = "text";
+        titleInput.id = "editTitle";
+        titleInput.value = test.title;
+        titleInput.required = true;
+
+        // Text input
+        const textLabel = document.createElement("label");
+        textLabel.textContent = "Текст:";
+        textLabel.htmlFor = "editText";
+
+        const textInput = document.createElement("textarea");
+        textInput.id = "editText";
+        textInput.value = test.text;
+        textInput.required = true;
+        textInput.rows = 4;
+
+        // Answers input
+        const answersLabel = document.createElement("label");
+        answersLabel.textContent = "Ответы (через запятую):";
+        answersLabel.htmlFor = "editAnswers";
+
+        const answersInput = document.createElement("input");
+        answersInput.type = "text";
+        answersInput.id = "editAnswers";
+        answersInput.value = test.answers.join(", ");
+
+        // Audio file input
+        const audioLabel = document.createElement("label");
+        audioLabel.textContent = "Аудиофайл:";
+        audioLabel.htmlFor = "editAudiofile";
+
+        const audioInput = document.createElement("input");
+        audioInput.type = "file";
+        audioInput.id = "editAudiofile";
+        audioInput.accept = "audio/*";
+
+        // Current audio preview
+        let audioPreview = null;
+        if (test.audiofile) {
+          audioPreview = document.createElement("div");
+          audioPreview.style.margin = "10px 0";
+
+          const audioPlayer = document.createElement("audio");
+          audioPlayer.controls = true;
+          audioPlayer.src = test.audiofile;
+
+          const removeAudioCheckbox = document.createElement("input");
+          removeAudioCheckbox.type = "checkbox";
+          removeAudioCheckbox.id = "removeAudio";
+
+          const removeAudioLabel = document.createElement("label");
+          removeAudioLabel.textContent = "Удалить аудиофайл";
+          removeAudioLabel.htmlFor = "removeAudio";
+
+          audioPreview.appendChild(
+            document.createTextNode("Текущий аудиофайл: ")
+          );
+          audioPreview.appendChild(audioPlayer);
+          audioPreview.appendChild(document.createElement("br"));
+          audioPreview.appendChild(removeAudioCheckbox);
+          audioPreview.appendChild(removeAudioLabel);
+        }
+
+        // Submit button
+        const submitButton = document.createElement("button");
+        submitButton.type = "submit";
+        submitButton.textContent = "Сохранить изменения";
+
+        // Add elements to form
+        editForm.appendChild(titleLabel);
+        editForm.appendChild(titleInput);
+        editForm.appendChild(document.createElement("br"));
+
+        editForm.appendChild(textLabel);
+        editForm.appendChild(textInput);
+        editForm.appendChild(document.createElement("br"));
+
+        editForm.appendChild(answersLabel);
+        editForm.appendChild(answersInput);
+        editForm.appendChild(document.createElement("br"));
+
+        editForm.appendChild(audioLabel);
+        editForm.appendChild(audioInput);
+
+        if (audioPreview) {
+          editForm.appendChild(audioPreview);
+        }
+
+        editForm.appendChild(document.createElement("br"));
+        editForm.appendChild(submitButton);
+
+        // Add form submission handler
+        editForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          const formData = new FormData();
+          formData.append("title", document.getElementById("editTitle").value);
+          formData.append("text", document.getElementById("editText").value);
+
+          // Get token from localStorage
+          const token = localStorage.getItem("authToken");
+          if (token) {
+            formData.append("token", token);
+          }
+
+          // Convert answers to array and send as JSON
+          const answersInput = document.getElementById("editAnswers").value;
+          const answersArray = answersInput
+            .split(",")
+            .map((item) => item.trim());
+          formData.append("answers", JSON.stringify(answersArray));
+
+          // Add audio file if selected
+          const audioInput = document.getElementById("editAudiofile");
+          if (audioInput.files.length > 0) {
+            formData.append("audiofile", audioInput.files[0]);
+          }
+
+          // Check if remove audio checkbox is checked
+          const removeAudioCheckbox = document.getElementById("removeAudio");
+          if (removeAudioCheckbox && removeAudioCheckbox.checked) {
+            formData.append("removeAudio", "true");
+          }
+
+          try {
+            const response = await fetch(
+              `http://localhost:3000/api/tests/${test.id}`,
+              {
+                method: "PUT",
+                body: formData,
+                credentials: "include", // Include cookies for authentication
+              }
+            );
+
+            if (response.status === 401) {
+              alert("Для редактирования теста необходимо войти в систему");
+              showLoginForm();
+              return;
+            }
+
+            const result = await response.json();
+
+            if (response.ok) {
+              alert("Тест успешно обновлен");
+              // Refresh the test list
+              document.getElementById("getTestsBtn").click();
+              displayResult("Тест обновлен", result);
+
+              // Remove edit form
+              document.getElementById("editFormContainer").remove();
+            } else {
+              alert(`Ошибка: ${result.error}`);
+              displayResult("Ошибка при обновлении теста", result);
+            }
+          } catch (error) {
+            console.error("Ошибка при обновлении теста:", error);
+            alert("Произошла ошибка при обновлении теста");
+          }
+        });
+
+        // Add elements to container
+        editFormContainer.appendChild(editTitle);
+        editFormContainer.appendChild(editForm);
+
+        // Add container to results div
+        document.getElementById("results").appendChild(editFormContainer);
+      }
+
+      // Check auth status when page loads
+      checkAuthStatus();
+    </script>
+  </body>
+</html>

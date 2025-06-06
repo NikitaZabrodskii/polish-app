@@ -2,8 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import userService from "../service/UserService";
 
-const JWT_SECRET =
-  "11aef5190b7ae7ab631c2edaea7469fc933dad66c076ee835956d0e9d31ddc4e6a8432edd61dbbc552c9886bb3547ee65e8b6409a9dc52fcd60cd7505fde704e"; // Secure JWT secret key
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is not defined in environment variables.");
+}
+
+// Secure JWT secret key
 
 // Extend the Request interface to include the user property
 declare global {
@@ -22,10 +27,8 @@ export const authenticate = async (
 ): Promise<void> => {
   try {
     // Get token from multiple sources: query, body, or headers
-    const token =
-      (req.query?.token as string) ||
-      (req.body?.token as string) ||
-      req.headers.authorization?.split(" ")[1]; // Bearer token format
+
+    const token = req.headers.authorization?.split(" ")[1]; // Bearer token format
 
     console.log("Token received:", token);
 

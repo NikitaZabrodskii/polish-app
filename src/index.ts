@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import "reflect-metadata";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
@@ -18,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(
   cors({
-    origin: true, // Allow all origins in development
+    origin: ["http://localhost:5173"], // Allow all origins in development
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -57,13 +60,13 @@ const upload = multer({
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 100 * 1024 * 1024, // 10MB limit
   },
 });
 
 // Middleware
 app.use(morgan("dev"));
-app.use(express.json());
+app.use(express.json({ type: "application/json" })); // Only for JSON requests
 app.use(cookieParser());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
@@ -83,13 +86,17 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 // Register a new user
 app.post(
   "/api/auth/register",
+  express.json(), // Ensure JSON parsing for this route
   (req: Request, res: Response, next: NextFunction): void => {
     (async () => {
       try {
         const { username, password } = req.body;
 
         if (!username || !password) {
-          res.status(400).json({ error: "Username and password are required" });
+          res.status(400).json({
+            success: false,
+            error: "Username and password are required",
+          });
           return;
         }
 
@@ -99,18 +106,28 @@ app.post(
         const { password: _, ...userWithoutPassword } = user;
 
         res.status(201).json({
-          message: "User registered successfully",
-          user: userWithoutPassword,
+          success: true,
+          data: {
+            message: "User registered successfully",
+            user: userWithoutPassword,
+          },
         });
       } catch (error) {
         if (
           error instanceof Error &&
           error.message === "Username already exists"
         ) {
-          res.status(409).json({ error: error.message });
+          res.status(409).json({
+            success: false,
+            error: error.message,
+          });
           return;
         }
-        next(error);
+        console.error("Registration error:", error);
+        res.status(500).json({
+          success: false,
+          error: "Registration failed",
+        });
       }
     })();
   }
@@ -119,44 +136,49 @@ app.post(
 // Login
 app.post(
   "/api/auth/login",
+  express.json(), // Ensure JSON parsing for this route
   (req: Request, res: Response, next: NextFunction): void => {
     (async () => {
       try {
         const { username, password } = req.body;
 
         if (!username || !password) {
-          res.status(400).json({ error: "Username and password are required" });
+          res.status(400).json({
+            success: false,
+            error: "Username and password are required",
+          });
           return;
         }
 
         const { user, token } = await userService.login(username, password);
 
-        // Set token as HTTP-only cookie
-        res.cookie("token", token, {
-          httpOnly: true,
-          secure: true, // Must be true when SameSite=None
-          maxAge: 24 * 60 * 60 * 1000, // 1 day
-          sameSite: "none",
-          path: "/",
-        });
-
         // Don't include password in response
         const { password: _, ...userWithoutPassword } = user;
 
         res.status(200).json({
-          message: "Login successful",
-          user: userWithoutPassword,
-          token,
+          success: true,
+          data: {
+            message: "Login successful",
+            user: userWithoutPassword,
+            token,
+          },
         });
       } catch (error) {
         if (
           error instanceof Error &&
           error.message === "Invalid username or password"
         ) {
-          res.status(401).json({ error: error.message });
+          res.status(401).json({
+            success: false,
+            error: error.message,
+          });
           return;
         }
-        next(error);
+        console.error("Login error:", error);
+        res.status(500).json({
+          success: false,
+          error: "Login failed",
+        });
       }
     })();
   }
@@ -217,61 +239,103 @@ app.get("/api/auth/me", authenticate, (req: Request, res: Response): void => {
 
 // Routes
 
-// 1. Create test endpoint
+// 1. Create test endpoint - Updated for flexible content structure
 app.post(
   "/api/tests",
   authenticate,
-  upload.single("audiofile"),
+  upload.single("audiofile"), // Still handle file uploads
   (req: Request, res: Response, next: NextFunction): void => {
     (async () => {
       try {
-        const { title, text } = req.body;
-        let answers: string[] = [];
+        console.log("Request body:", req.body);
+        console.log("Request file:", req.file);
 
-        if (req.body.answers) {
-          try {
-            // Handle answers as JSON string or array
-            answers =
-              typeof req.body.answers === "string"
-                ? JSON.parse(req.body.answers)
-                : req.body.answers;
-          } catch (e) {
-            res.status(400).json({ error: "Invalid answers format" });
-            return;
+        const { type, title } = req.body;
+
+        if (!type || !title) {
+          res.status(400).json({
+            success: false,
+            error: "Type and title are required",
+          });
+          return;
+        }
+
+        // Build content object from form data
+        const content: any = {};
+
+        // Extract all fields except type, title, and audiofile into content
+        Object.keys(req.body).forEach((key) => {
+          if (key !== "type" && key !== "title") {
+            content[key] = req.body[key];
           }
+        });
+
+        // Handle audio file - check if uploaded and add to content
+        let audioPath = "";
+        if (req.file) {
+          audioPath = `/uploads/${req.file.filename}`;
+          content.audiofile = audioPath; // Add audio path to content
         }
 
-        if (!title || !text) {
-          res.status(400).json({ error: "Title and text are required" });
-          return;
+        // Handle different test types and their specific content structures
+        switch (type) {
+          case "multiple_choice":
+          case "input-choice":
+            if (content.answers && typeof content.answers === "string") {
+              content.answers = content.answers
+                .split(",")
+                .map((item: string) => item.trim())
+                .filter(Boolean);
+            }
+            break;
+          case "true_false":
+            if (content.correctAnswer) {
+              content.correctAnswer = content.correctAnswer === "true";
+            }
+            break;
+          case "fill_in_blank":
+            if (content.blanks && typeof content.blanks === "string") {
+              content.blanks = content.blanks
+                .split(",")
+                .map((item: string) => item.trim())
+                .filter(Boolean);
+            }
+            break;
+          // Add more test types as needed
         }
-
-        if (!Array.isArray(answers)) {
-          res.status(400).json({ error: "Answers must be an array" });
-          return;
-        }
-
-        const relativePath = req.file
-          ? `/uploads/${req.file.filename}`
-          : undefined;
 
         const newTest = await testService.createTest(
+          type,
           title,
-          text,
-          answers,
-          relativePath
+          content,
+          "" // Don't store audiofile separately, only in content
         );
 
-        // Create full URL for audiofile if it exists
-        if (newTest.audiofile) {
+        // Prepare response
+        const responseTest = {
+          id: newTest.id,
+          type: newTest.type,
+          title: newTest.title,
+          content: JSON.parse(newTest.content),
+        };
+
+        // Create full URL for audiofile if it exists in content
+        if (responseTest.content.audiofile) {
           const host = req.get("host");
           const protocol = req.protocol;
-          newTest.audiofile = `${protocol}://${host}${newTest.audiofile}`;
+          responseTest.content.audiofile = `${protocol}://${host}${responseTest.content.audiofile}`;
         }
 
-        res.status(201).json(newTest);
+        res.status(201).json({
+          success: true,
+          data: responseTest,
+        });
       } catch (error) {
-        next(error);
+        console.error("Error creating test:", error);
+        res.status(500).json({
+          success: false,
+          error: "Failed to create test",
+        });
       }
     })();
   }
@@ -287,7 +351,10 @@ app.delete(
         const id = parseInt(req.params.id, 10);
 
         if (isNaN(id)) {
-          res.status(400).json({ error: "Invalid ID format" });
+          res.status(400).json({
+            success: false,
+            error: "Invalid ID format",
+          });
           return;
         }
 
@@ -295,7 +362,10 @@ app.delete(
         const test = await testService.getTestById(id);
 
         if (!test) {
-          res.status(404).json({ error: "Test not found" });
+          res.status(404).json({
+            success: false,
+            error: "Test not found",
+          });
           return;
         }
 
@@ -310,15 +380,22 @@ app.delete(
           }
         }
 
-        res.status(200).json({ message: "Test deleted successfully" });
+        res.status(200).json({
+          success: true,
+          data: { message: "Test deleted successfully" },
+        });
       } catch (error) {
-        next(error);
+        console.error("Error deleting test:", error);
+        res.status(500).json({
+          success: false,
+          error: "Failed to delete test",
+        });
       }
     })();
   }
 );
 
-// 3. Get all tests (just titles)
+// 3. Get all tests
 app.get(
   "/api/tests",
   (req: Request, res: Response, next: NextFunction): void => {
@@ -326,17 +403,26 @@ app.get(
       try {
         const tests = await testService.getAllTests();
 
-        // Add base URL to the response for constructing audio URLs on the frontend
-        const host = req.get("host");
-        const protocol = req.protocol;
-        const baseUrl = `${protocol}://${host}`;
+        // Format tests for response - include type information
+        const formattedTests = tests.map((test) => ({
+          id: test.id,
+          type: test.type,
+          title: test.title,
+        }));
 
         res.status(200).json({
-          tests,
-          baseUrl,
+          success: true,
+          data: {
+            tests: formattedTests,
+            baseUrl: `${req.protocol}://${req.get("host")}`,
+          },
         });
       } catch (error) {
-        next(error);
+        console.error("Error getting tests:", error);
+        res.status(500).json({
+          success: false,
+          error: "Failed to get tests",
+        });
       }
     })();
   }
@@ -351,27 +437,48 @@ app.get(
         const id = parseInt(req.params.id, 10);
 
         if (isNaN(id)) {
-          res.status(400).json({ error: "Invalid ID format" });
+          res.status(400).json({
+            success: false,
+            error: "Invalid ID format",
+          });
           return;
         }
 
         const test = await testService.getTestById(id);
 
         if (!test) {
-          res.status(404).json({ error: "Test not found" });
+          res.status(404).json({
+            success: false,
+            error: "Test not found",
+          });
           return;
         }
 
-        // Create full URL for audiofile if it exists
-        if (test.audiofile) {
+        // Prepare response with parsed content
+        const responseTest = {
+          id: test.id,
+          type: test.type,
+          title: test.title,
+          content: (test as any).parsedContent || {},
+        };
+
+        // Create full URLs for audio files only in content
+        if (responseTest.content.audiofile) {
           const host = req.get("host");
           const protocol = req.protocol;
-          test.audiofile = `${protocol}://${host}${test.audiofile}`;
+          responseTest.content.audiofile = `${protocol}://${host}${responseTest.content.audiofile}`;
         }
 
-        res.status(200).json(test);
+        res.status(200).json({
+          success: true,
+          data: responseTest,
+        });
       } catch (error) {
-        next(error);
+        console.error("Error getting test:", error);
+        res.status(500).json({
+          success: false,
+          error: "Failed to get test",
+        });
       }
     })();
   }
@@ -408,8 +515,8 @@ app.put(
           }
         }
 
-        if (!title || !text) {
-          res.status(400).json({ error: "Title and text are required" });
+        if (!text) {
+          res.status(400).json({ error: "Text are required" });
           return;
         }
 

@@ -6,20 +6,14 @@ export class Test {
   id: number;
 
   @Column()
-  title: string;
+  type: string; // e.g., "multiple_choice", "true_false", "audio_question", etc.
 
   @Column()
-  text: string;
+  title: string;
 
-  @Column({
-    type: "simple-json",
-    transformer: {
-      from: (value: string): string[] => JSON.parse(value),
-      to: (value: string[]): string => JSON.stringify(value),
-    },
-  })
-  answers: string[];
+  @Column("text")
+  content: string; // JSON string containing flexible content based on type
 
   @Column({ nullable: true })
-  audiofile: string;
+  audiofile: string; // Path to audio file if exists
 }

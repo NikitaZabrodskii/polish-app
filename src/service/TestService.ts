@@ -14,6 +14,7 @@ export class TestService {
     title: string,
     text: string,
     answers: string[],
+    type: string,
     audiofile?: string
   ): Promise<Test> {
     const test = new Test();

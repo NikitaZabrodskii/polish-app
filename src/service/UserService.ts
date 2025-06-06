@@ -2,10 +2,12 @@ import { Repository } from "typeorm";
 import { User } from "../entity/User";
 import { AppDataSource } from "../data-source";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
 
-const JWT_SECRET =
-  "11aef5190b7ae7ab631c2edaea7469fc933dad66c076ee835956d0e9d31ddc4e6a8432edd61dbbc552c9886bb3547ee65e8b6409a9dc52fcd60cd7505fde704e"; // Secure JWT secret key
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is not defined in environment variables.");
+}
 
 export class UserService {
   private userRepository: Repository<User>;
@@ -56,7 +58,7 @@ export class UserService {
     // Generate JWT token
     const token = jwt.sign(
       { id: user.id, username: user.username },
-      JWT_SECRET,
+      JWT_SECRET as string,
       {
         expiresIn: "1d", // Token expires in 1 day
       }

@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import "reflect-metadata";
-import express, { Request, Response, NextFunction } from "express";
+import express, { Request, Response, NextFunction, json } from "express";
 import cors from "cors";
 import morgan from "morgan";
 import multer from "multer";
@@ -21,13 +21,14 @@ const PORT = process.env.PORT || 3000;
 
 app.use(
   cors({
-    origin: ["http://localhost:5173"], // Allow all origins in development
+    origin: true, // This allows all origins
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
       "Authorization",
       "Content-Length",
       "X-Requested-With",
+      "ngrok-skip-browser-warning",
     ],
     credentials: true,
   })
@@ -350,6 +351,8 @@ app.delete(
       try {
         const id = parseInt(req.params.id, 10);
 
+        console.log("ID:", id);
+
         if (isNaN(id)) {
           res.status(400).json({
             success: false,
@@ -369,12 +372,15 @@ app.delete(
           return;
         }
 
+        const jsonTest = JSON.parse(test.content);
+
         // Delete the test from the database
         await testService.deleteTest(id);
 
         // Delete associated audio file if exists
-        if (test.audiofile) {
-          const audiofilePath = path.join(__dirname, "..", test.audiofile);
+        if (jsonTest.audiofile) {
+          console.log("Deleting audio file:", jsonTest.audiofile);
+          const audiofilePath = path.join(__dirname, "..", jsonTest.audiofile);
           if (fs.existsSync(audiofilePath)) {
             fs.unlinkSync(audiofilePath);
           }

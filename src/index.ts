@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL, // This allows all origins
+    origin: process.env.FRONTEND_URL,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -38,10 +38,19 @@ app.use(
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(__dirname, "../uploads");
+    const audioDir = path.join(uploadDir, "audio");
+
+    // Ensure uploads directory exists
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
-    cb(null, uploadDir);
+
+    // Ensure audio subdirectory exists
+    if (!fs.existsSync(audioDir)) {
+      fs.mkdirSync(audioDir, { recursive: true });
+    }
+
+    cb(null, audioDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -274,7 +283,7 @@ app.post(
         // Handle audio file - check if uploaded and add to content
         let audioPath = "";
         if (req.file) {
-          audioPath = `/uploads/${req.file.filename}`;
+          audioPath = `/uploads/audio/${req.file.filename}`;
           content.audiofile = audioPath; // Add audio path to content
         }
 
@@ -543,7 +552,7 @@ app.put(
 
         if (req.file) {
           // New audio file uploaded, update path
-          relativePath = `/uploads/${req.file.filename}`;
+          relativePath = `/uploads/audio/${req.file.filename}`;
 
           // Delete old audio file if exists
           if (existingTest.audiofile) {

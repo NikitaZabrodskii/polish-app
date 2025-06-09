@@ -18,10 +18,14 @@ export class TestService {
     audiofile?: string
   ): Promise<Test> {
     const test = new Test();
+
     test.title = title;
-    test.text = text;
-    test.answers = answers;
-    test.audiofile = audiofile || "";
+    test.content = JSON.stringify({
+      text,
+      answers,
+      type,
+      audiofile: audiofile || "",
+    });
 
     return await this.testRepository.save(test);
   }

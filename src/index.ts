@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(
   cors({
-    origin: true, // This allows all origins
+    origin: process.env.FRONTEND_URL, // This allows all origins
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",

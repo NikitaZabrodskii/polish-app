@@ -14,6 +14,8 @@ import testService from "./services/TestService";
 import userService from "./service/UserService";
 import { Test } from "./entity/Test";
 import { authenticate } from "./middleware/auth";
+import archiver from "archiver";
+import { AppDataSource } from "./data-source";
 
 // Initialize Express app
 const app = express();
@@ -603,6 +605,264 @@ app.put(
     })();
   }
 );
+
+app.get("/download-audio-zip", (req: Request, res: Response): void => {
+  // Check secret key
+  const secretKey = req.query.key;
+  const expectedKey = process.env.EXPORT_SECRET_KEY;
+
+  if (!secretKey || secretKey !== expectedKey) {
+    res.status(403).send("Access denied. Invalid or missing secret key.");
+    return;
+  }
+
+  const audioDir = path.join(__dirname, "../uploads/audio");
+
+  // Проверка существования папки
+  if (!fs.existsSync(audioDir)) {
+    res.status(404).send("Папка audio не найдена");
+    return;
+  }
+
+  // Устанавливаем заголовки
+  res.setHeader("Content-Disposition", "attachment; filename=audio_files.zip");
+  res.setHeader("Content-Type", "application/zip");
+
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  archive.pipe(res);
+
+  // Добавляем файлы из папки
+  archive.directory(audioDir, false);
+  archive.finalize();
+});
+
+// Simple export endpoints (with secret key protection)
+app.get("/export-all-tests", (req: Request, res: Response): void => {
+  // Check secret key
+  const secretKey = req.query.key;
+  const expectedKey = process.env.EXPORT_SECRET_KEY;
+
+  if (!secretKey || secretKey !== expectedKey) {
+    res.status(403).json({
+      success: false,
+      error: "Access denied. Invalid or missing secret key.",
+    });
+    return;
+  }
+
+  (async () => {
+    try {
+      // Get all tests with full content
+      const testRepository = AppDataSource.getRepository(Test);
+      const tests = await testRepository.find();
+
+      // Parse test content from JSON strings
+      const formattedTests = tests.map((test: Test) => ({
+        id: test.id,
+        type: test.type,
+        title: test.title,
+        content: test.content ? JSON.parse(test.content) : {},
+        audiofile: test.audiofile,
+      }));
+
+      // Set headers for file download
+      const filename = `all-tests-${
+        new Date().toISOString().split("T")[0]
+      }.json`;
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+
+      res.status(200).json({
+        exportDate: new Date().toISOString(),
+        totalTests: tests.length,
+        tests: formattedTests,
+      });
+    } catch (error) {
+      console.error("Error exporting tests:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to export tests",
+      });
+    }
+  })();
+});
+
+// Browser-friendly download page
+app.get("/download-page", (req: Request, res: Response): void => {
+  const userKey = req.query.key as string;
+  const expectedKey = process.env.EXPORT_SECRET_KEY;
+  const isAuthorized = userKey && userKey === expectedKey;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Download Files</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 800px; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .download-btn { 
+            background: #007bff; 
+            color: white; 
+            padding: 12px 24px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            margin: 10px 5px;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+        }
+        .download-btn:hover { background: #0056b3; }
+        .download-btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .access-form { 
+            background: #f8f9fa; 
+            border: 1px solid #dee2e6; 
+            padding: 20px; 
+            border-radius: 5px; 
+            margin: 20px 0;
+        }
+        .success-info { 
+            background: #d4edda; 
+            border: 1px solid #c3e6cb; 
+            color: #155724;
+            padding: 15px; 
+            border-radius: 5px; 
+            margin: 20px 0;
+        }
+        .url-example { 
+            background: #f8f9fa; 
+            padding: 10px; 
+            border-radius: 3px; 
+            font-family: monospace; 
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .form-input {
+            width: 300px;
+            padding: 8px;
+            margin: 10px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        .form-btn {
+            background: #28a745;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Secure Data Export</h1>
+        
+        ${
+          !isAuthorized
+            ? `
+        <div class="access-form">
+            <h3>🔑 Access Required</h3>
+            <p>Enter your secret key to access downloads:</p>
+            <form method="GET">
+                <input type="text" name="key" placeholder="Enter secret key" class="form-input" required>
+                <button type="submit" class="form-btn">Access Downloads</button>
+            </form>
+        </div>
+        `
+            : `
+        <div class="success-info">
+            <h3>✅ Access Granted</h3>
+            <p>You can now download all available files.</p>
+        </div>
+        
+        <h2>🎵 Audio Files</h2>
+        <a href="/download-audio-zip?key=${userKey}" class="download-btn" download="audio_files.zip">
+            Download Audio ZIP
+        </a>
+        <div class="url-example">
+            curl "${req.protocol}://${req.get(
+                "host"
+              )}/download-audio-zip?key=YOUR_KEY" -o audio.zip
+        </div>
+        
+        <h2>📊 Test Data</h2>
+        <a href="/export-all-tests?key=${userKey}" class="download-btn" download="all-tests.json">
+            Download Tests JSON
+        </a>
+        <div class="url-example">
+            curl "${req.protocol}://${req.get(
+                "host"
+              )}/export-all-tests?key=YOUR_KEY" -o tests.json
+        </div>
+        
+        <h2>📋 Database File</h2>
+        <a href="/download-database?key=${userKey}" class="download-btn" download="tests.db">
+            Download Database
+        </a>
+        <div class="url-example">
+            curl "${req.protocol}://${req.get(
+                "host"
+              )}/download-database?key=YOUR_KEY" -o database.db
+        </div>
+        
+        <hr style="margin: 30px 0;">
+        
+        <h3>📚 Usage Examples:</h3>
+        <p>Replace YOUR_KEY with your actual secret key:</p>
+        
+        <h4>wget:</h4>
+        <div class="url-example">
+wget "${req.protocol}://${req.get(
+                "host"
+              )}/export-all-tests?key=YOUR_KEY" -O tests.json
+        </div>
+        
+        <h4>PHP:</h4>
+        <div class="url-example">
+$data = file_get_contents('${req.protocol}://${req.get(
+                "host"
+              )}/export-all-tests?key=YOUR_KEY');
+        </div>
+        `
+        }
+    </div>
+</body>
+</html>`;
+
+  res.setHeader("Content-Type", "text/html");
+  res.send(html);
+});
+
+// Download database file
+app.get("/download-database", (req: Request, res: Response): void => {
+  // Check secret key
+  const secretKey = req.query.key;
+  const expectedKey = process.env.EXPORT_SECRET_KEY;
+
+  if (!secretKey || secretKey !== expectedKey) {
+    res.status(403).send("Access denied. Invalid or missing secret key.");
+    return;
+  }
+
+  const dbPath = path.join(__dirname, "../uploads/tests.db");
+
+  if (!fs.existsSync(dbPath)) {
+    res.status(404).send("Database not found");
+    return;
+  }
+
+  const filename = `tests-backup-${new Date().toISOString().split("T")[0]}.db`;
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+  const fileStream = fs.createReadStream(dbPath);
+  fileStream.pipe(res);
+});
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

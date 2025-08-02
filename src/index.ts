@@ -80,6 +80,14 @@ const upload = multer({
 app.use(morgan("dev"));
 app.use(express.json({ type: "application/json" })); // Only for JSON requests
 app.use(cookieParser());
+
+app.use("/uploads/audio", (req: Request, res: Response, next: NextFunction) => {
+  if (req.path.endsWith(".mp3")) {
+    res.setHeader("Content-Type", "audio/mpeg");
+  }
+  next();
+});
+
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Initialize database

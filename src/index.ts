@@ -21,9 +21,16 @@ import { AppDataSource } from "./data-source";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "https://web.telegram.org",
+  "https://t.me",
+  "null",
+].filter((origin): origin is string => typeof origin === "string");
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -31,9 +38,6 @@ app.use(
       "Content-Length",
       "X-Requested-With",
       "ngrok-skip-browser-warning",
-      "https://web.telegram.org",
-      "https://t.me",
-      "null",
     ],
     credentials: true,
   })

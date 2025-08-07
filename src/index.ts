@@ -31,6 +31,9 @@ app.use(
       "Content-Length",
       "X-Requested-With",
       "ngrok-skip-browser-warning",
+      "https://web.telegram.org",
+      "https://t.me",
+      "null",
     ],
     credentials: true,
   })
